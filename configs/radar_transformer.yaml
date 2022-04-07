@@ -14,7 +14,7 @@ model:
     first_stage_config:
       target: taming.models.vqgan.VQModel
       params:
-        ckpt_path: logs/2021-06-08T10-50-38_radar_vqgan/checkpoints/0615_76.ckpt
+        ckpt_path: logs/2021-07-05T16-55-00_radar_vqgan/checkpoints/last.ckpt
         embed_dim: 256
         n_embed: 1024
         ddconfig:
