@@ -14,7 +14,7 @@ def disabled_train(self, mode=True):
 
 class Net2NetTransformer(pl.LightningModule):
     def __init__(self, transformer_config, first_stage_config,
-                 cond_stage_config, permuter_config=None,
+                 permuter_config=None,
                  ckpt_path=None, ignore_keys=[],
                  first_stage_key="image",
                  cond_stage_key="depth",
@@ -23,7 +23,6 @@ class Net2NetTransformer(pl.LightningModule):
 
         super().__init__()
         self.init_first_stage_from_ckpt(first_stage_config)
-        self.init_cond_stage_from_ckpt(cond_stage_config)
         if permuter_config is None:
             permuter_config = {"target": "taming.modules.transformer.permuter.Identity"}
         self.permuter = instantiate_from_config(config=permuter_config)
@@ -52,17 +51,10 @@ class Net2NetTransformer(pl.LightningModule):
         model.train = disabled_train
         self.first_stage_model = model
 
-    def init_cond_stage_from_ckpt(self, config):
-        model = instantiate_from_config(config)
-        model = model.eval()
-        model.train = disabled_train
-        self.cond_stage_model = model
-
-    def forward(self, x, c1, c2):
+    def forward(self, x, c):
         # one step to produce the logits
-        _, z_indices  = self.encode_to_z(x)
-        _, c1_indices = self.encode_to_c(c1)
-        _, c2_indices = self.encode_to_c(c2)
+        _, z_indices = self.encode_to_z(x)
+        _, c_indices = self.encode_to_c(c)
 
         if self.training and self.pkeep < 1.0:
             mask = torch.bernoulli(self.pkeep*torch.ones(z_indices.shape,
@@ -73,7 +65,7 @@ class Net2NetTransformer(pl.LightningModule):
         else:
             a_indices = z_indices
 
-        cz_indices = torch.cat((c1_indices, c2_indices, a_indices), dim=1)
+        cz_indices = torch.cat((c_indices, a_indices), dim=1)
 
         # target includes all sequence elements (no need to handle first one
         # differently because we are conditioning)
@@ -156,7 +148,7 @@ class Net2NetTransformer(pl.LightningModule):
 
     @torch.no_grad()
     def encode_to_c(self, c):
-        quant_c, _, info = self.first_stage_model.encode(x)
+        quant_c, _, info = self.first_stage_model.encode(c)
         indices = info[2].view(quant_c.shape[0], -1)
         indices = self.permuter(indices)
         return quant_c, indices
@@ -219,23 +211,23 @@ class Net2NetTransformer(pl.LightningModule):
         log["inputs"] = x
         log["reconstructions"] = x_rec
 
-        if self.cond_stage_key != "image":
-            cond_rec = self.cond_stage_model.decode(quant_c)
-            if self.cond_stage_key == "segmentation":
-                # get image from segmentation mask
-                num_classes = cond_rec.shape[1]
-
-                c = torch.argmax(c, dim=1, keepdim=True)
-                c = F.one_hot(c, num_classes=num_classes)
-                c = c.squeeze(1).permute(0, 3, 1, 2).float()
-                c = self.cond_stage_model.to_rgb(c)
-
-                cond_rec = torch.argmax(cond_rec, dim=1, keepdim=True)
-                cond_rec = F.one_hot(cond_rec, num_classes=num_classes)
-                cond_rec = cond_rec.squeeze(1).permute(0, 3, 1, 2).float()
-                cond_rec = self.cond_stage_model.to_rgb(cond_rec)
-            log["conditioning_rec"] = cond_rec
-            log["conditioning"] = c
+#        if self.cond_stage_key != "image":
+#            cond_rec = self.fist(quant_c)
+#            if self.cond_stage_key == "segmentation":
+#                # get image from segmentation mask
+#                num_classes = cond_rec.shape[1]
+#
+#                c = torch.argmax(c, dim=1, keepdim=True)
+#                c = F.one_hot(c, num_classes=num_classes)
+#                c = c.squeeze(1).permute(0, 3, 1, 2).float()
+#                c = self.cond_stage_model.to_rgb(c)
+#
+#                cond_rec = torch.argmax(cond_rec, dim=1, keepdim=True)
+#                cond_rec = F.one_hot(cond_rec, num_classes=num_classes)
+#                cond_rec = cond_rec.squeeze(1).permute(0, 3, 1, 2).float()
+#                cond_rec = self.cond_stage_model.to_rgb(cond_rec)
+#            log["conditioning_rec"] = cond_rec
+#            log["conditioning"] = c
 
         log["samples_half"] = x_sample
         log["samples_nopix"] = x_sample_nopix
@@ -253,17 +245,15 @@ class Net2NetTransformer(pl.LightningModule):
 
     def get_xc(self, batch, N=None):
         x = self.get_input(self.first_stage_key, batch)
-        c1 = self.get_input(self.first_stage_key, batch)
-        c2 = self.get_input(self.first_stage_key, batch)
+        c = self.get_input(self.cond_stage_key, batch)
         if N is not None:
             x = x[:N]
-            c1 = c1[:N]
-            c2 = c2[:N]
-        return x, c1, c2
+            c = c[:N]
+        return x, c
 
     def shared_step(self, batch, batch_idx):
-        x, c1, c2 = self.get_xc(batch)
-        logits, target = self(x, c1, c2)
+        x, c = self.get_xc(batch)
+        logits, target = self(x, c)
         loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), target.reshape(-1))
         return loss
 

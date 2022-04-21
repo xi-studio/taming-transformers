@@ -1,6 +1,6 @@
 model:
   base_learning_rate: 4.5e-06
-  target: taming.models.cond_transformer.Net2NetTransformer
+  target: taming.models.radar_transformer.Net2NetTransformer
   params:
     cond_stage_key: coord
     transformer_config:
@@ -36,11 +36,6 @@ model:
           dropout: 0.0
         lossconfig:
           target: taming.modules.losses.DummyLoss
-    cond_stage_config:
-      target: taming.modules.misc.coord.CoordStage
-      params:
-        n_embed: 1024
-        down_factor: 16
 
 data:
   target: main.DataModuleFromConfig
@@ -48,12 +43,12 @@ data:
     batch_size: 2
     num_workers: 8
     train:
-      target: taming.data.radarhq.RadarHQTrain
+      target: taming.data.radar_trans.RadarHQTrain
       params:
         size: 256
         crop_size: 256
     validation:
-      target: taming.data.radarhq.RadarHQValidation
+      target: taming.data.radar_trans.RadarHQValidation
       params:
         size: 256
         crop_size: 256
