@@ -2,12 +2,13 @@ model:
   base_learning_rate: 4.5e-06
   target: taming.models.radar_transformer.Net2NetTransformer
   params:
-    cond_stage_key: coord
+    cond_stage_key1: coord1
+    cond_stage_key2: coord2
     transformer_config:
       target: taming.modules.transformer.mingpt.GPT
       params:
         vocab_size: 1024
-        block_size: 512
+        block_size: 768
         n_layer: 24
         n_head: 16
         n_embd: 1024

@@ -17,7 +17,8 @@ class Net2NetTransformer(pl.LightningModule):
                  permuter_config=None,
                  ckpt_path=None, ignore_keys=[],
                  first_stage_key="image",
-                 cond_stage_key="depth",
+                 cond_stage_key1="depth",
+                 cond_stage_key2="depth",
                  downsample_cond_size=-1,
                  pkeep=1.0):
 
@@ -31,7 +32,8 @@ class Net2NetTransformer(pl.LightningModule):
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
         self.first_stage_key = first_stage_key
-        self.cond_stage_key = cond_stage_key
+        self.cond_stage_key1 = cond_stage_key1
+        self.cond_stage_key2 = cond_stage_key2
         self.downsample_cond_size = downsample_cond_size
         self.pkeep = pkeep
 
@@ -51,10 +53,11 @@ class Net2NetTransformer(pl.LightningModule):
         model.train = disabled_train
         self.first_stage_model = model
 
-    def forward(self, x, c):
+    def forward(self, x, c1, c2):
         # one step to produce the logits
         _, z_indices = self.encode_to_z(x)
-        _, c_indices = self.encode_to_c(c)
+        _, c_indices_1 = self.encode_to_c(c1)
+        _, c_indices_2 = self.encode_to_c(c2)
 
         if self.training and self.pkeep < 1.0:
             mask = torch.bernoulli(self.pkeep*torch.ones(z_indices.shape,
@@ -64,16 +67,23 @@ class Net2NetTransformer(pl.LightningModule):
             a_indices = mask*z_indices+(1-mask)*r_indices
         else:
             a_indices = z_indices
+        
+        print('c1', c_indices_1.shape)
+        print('c2', c_indices_2.shape)
 
-        cz_indices = torch.cat((c_indices, a_indices), dim=1)
+        cz_indices = torch.cat((c_indices_1, c_indices_2, a_indices), dim=1)
+        
+        print('cz', cz_indices.shape)
 
         # target includes all sequence elements (no need to handle first one
         # differently because we are conditioning)
         target = z_indices
         # make the prediction
         logits, _ = self.transformer(cz_indices[:, :-1])
+        print(logits.shape)
+      
         # cut off conditioning outputs - output i corresponds to p(z_i | z_{<i}, c)
-        logits = logits[:, c_indices.shape[1]-1:]
+        logits = logits[:, c_indices_1.shape[1] * 2 - 1:]
 
         return logits, target
 
@@ -84,9 +94,9 @@ class Net2NetTransformer(pl.LightningModule):
         return out
 
     @torch.no_grad()
-    def sample(self, x, c, steps, temperature=1.0, sample=False, top_k=None,
+    def sample(self, x, c1, c2, steps, temperature=1.0, sample=False, top_k=None,
                callback=lambda k: None):
-        x = torch.cat((c,x),dim=1)
+        x = torch.cat((c1, c2, x),dim=1)
         block_size = self.transformer.get_block_size()
         assert not self.transformer.training
         if self.pkeep <= 0.0:
@@ -245,15 +255,17 @@ class Net2NetTransformer(pl.LightningModule):
 
     def get_xc(self, batch, N=None):
         x = self.get_input(self.first_stage_key, batch)
-        c = self.get_input(self.cond_stage_key, batch)
+        c1 = self.get_input(self.cond_stage_key1, batch)
+        c2 = self.get_input(self.cond_stage_key2, batch)
         if N is not None:
             x = x[:N]
-            c = c[:N]
-        return x, c
+            c1 = c1[:N]
+            c2 = c2[:N]
+        return x, c1, c2
 
     def shared_step(self, batch, batch_idx):
-        x, c = self.get_xc(batch)
-        logits, target = self(x, c)
+        x, c1, c2 = self.get_xc(batch)
+        logits, target = self(x, c1, c2)
         loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), target.reshape(-1))
         return loss
 

@@ -38,8 +38,9 @@ class ImagePaths(Dataset):
 
     def __getitem__(self, i):
         example = dict()
-        example["image"] = self.preprocess_image(self.labels["file_path_"][i])
-        example["coord"] = self.preprocess_image(self.labels["file_path_"][i])
+        example["image"]  = self.preprocess_image(self.labels["file_path_"][i])
+        example["coord1"] = self.preprocess_image(self.labels["file_path_"][i])
+        example["coord2"] = self.preprocess_image(self.labels["file_path_"][i])
         for k in self.labels:
             example[k] = self.labels[k][i]
         return example
