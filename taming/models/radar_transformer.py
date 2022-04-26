@@ -93,7 +93,7 @@ class Net2NetTransformer(pl.LightningModule):
 #    def sample(self, x, c1, c2, steps, temperature=1.0, sample=False, top_k=None,
 #               callback=lambda k: None):
 #        x = torch.cat((c1, c2, x),dim=1)
-#        block_size = self.transformer.get_block_size()
+#       block_size = self.transformer.get_block_size()
 #        assert not self.transformer.training
 #        if self.pkeep <= 0.0:
 #            # one pass suffices since input is pure noise anyway
@@ -234,11 +234,11 @@ class Net2NetTransformer(pl.LightningModule):
 #                cond_rec = self.cond_stage_model.to_rgb(cond_rec)
 #            log["conditioning_rec"] = cond_rec
 #            log["conditioning"] = c
-
-        log["samples_half"] = x_sample
-        log["samples_nopix"] = x_sample_nopix
-        log["samples_det"] = x_sample_det
-        return log
+#
+#        log["samples_half"] = x_sample
+#        log["samples_nopix"] = x_sample_nopix
+#        log["samples_det"] = x_sample_det
+#        return log
 
     def get_input(self, key, batch):
         x = batch[key]

@@ -12,7 +12,7 @@ class ImagePaths(Dataset):
 
         self.labels = dict() if labels is None else labels
         self.labels["file_path_"] = paths
-        self._length = len(paths)
+        self._length = len(paths) - 10
 
         if self.size is not None and self.size > 0:
             self.rescaler = albumentations.SmallestMaxSize(max_size = self.size)
@@ -38,9 +38,9 @@ class ImagePaths(Dataset):
 
     def __getitem__(self, i):
         example = dict()
-        example["image"]  = self.preprocess_image(self.labels["file_path_"][i])
+        example["image"]  = self.preprocess_image(self.labels["file_path_"][i + 2])
         example["coord1"] = self.preprocess_image(self.labels["file_path_"][i])
-        example["coord2"] = self.preprocess_image(self.labels["file_path_"][i])
+        example["coord2"] = self.preprocess_image(self.labels["file_path_"][i + 1])
         for k in self.labels:
             example[k] = self.labels[k][i]
         return example
