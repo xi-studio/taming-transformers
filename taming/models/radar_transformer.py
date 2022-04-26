@@ -68,19 +68,15 @@ class Net2NetTransformer(pl.LightningModule):
         else:
             a_indices = z_indices
         
-        print('c1', c_indices_1.shape)
-        print('c2', c_indices_2.shape)
 
         cz_indices = torch.cat((c_indices_1, c_indices_2, a_indices), dim=1)
         
-        print('cz', cz_indices.shape)
 
         # target includes all sequence elements (no need to handle first one
         # differently because we are conditioning)
         target = z_indices
         # make the prediction
         logits, _ = self.transformer(cz_indices[:, :-1])
-        print(logits.shape)
       
         # cut off conditioning outputs - output i corresponds to p(z_i | z_{<i}, c)
         logits = logits[:, c_indices_1.shape[1] * 2 - 1:]
@@ -93,62 +89,62 @@ class Net2NetTransformer(pl.LightningModule):
         out[out < v[..., [-1]]] = -float('Inf')
         return out
 
-    @torch.no_grad()
-    def sample(self, x, c1, c2, steps, temperature=1.0, sample=False, top_k=None,
-               callback=lambda k: None):
-        x = torch.cat((c1, c2, x),dim=1)
-        block_size = self.transformer.get_block_size()
-        assert not self.transformer.training
-        if self.pkeep <= 0.0:
-            # one pass suffices since input is pure noise anyway
-            assert len(x.shape)==2
-            noise_shape = (x.shape[0], steps-1)
-            #noise = torch.randint(self.transformer.config.vocab_size, noise_shape).to(x)
-            noise = c.clone()[:,x.shape[1]-c.shape[1]:-1]
-            x = torch.cat((x,noise),dim=1)
-            logits, _ = self.transformer(x)
-            # take all logits for now and scale by temp
-            logits = logits / temperature
-            # optionally crop probabilities to only the top k options
-            if top_k is not None:
-                logits = self.top_k_logits(logits, top_k)
-            # apply softmax to convert to probabilities
-            probs = F.softmax(logits, dim=-1)
-            # sample from the distribution or take the most likely
-            if sample:
-                shape = probs.shape
-                probs = probs.reshape(shape[0]*shape[1],shape[2])
-                ix = torch.multinomial(probs, num_samples=1)
-                probs = probs.reshape(shape[0],shape[1],shape[2])
-                ix = ix.reshape(shape[0],shape[1])
-            else:
-                _, ix = torch.topk(probs, k=1, dim=-1)
-            # cut off conditioning
-            x = ix[:, c.shape[1]-1:]
-        else:
-            for k in range(steps):
-                callback(k)
-                assert x.size(1) <= block_size # make sure model can see conditioning
-                x_cond = x if x.size(1) <= block_size else x[:, -block_size:]  # crop context if needed
-                logits, _ = self.transformer(x_cond)
-                # pluck the logits at the final step and scale by temperature
-                logits = logits[:, -1, :] / temperature
-                # optionally crop probabilities to only the top k options
-                if top_k is not None:
-                    logits = self.top_k_logits(logits, top_k)
-                # apply softmax to convert to probabilities
-                probs = F.softmax(logits, dim=-1)
-                # sample from the distribution or take the most likely
-                if sample:
-                    ix = torch.multinomial(probs, num_samples=1)
-                else:
-                    _, ix = torch.topk(probs, k=1, dim=-1)
-                # append to the sequence and continue
-                x = torch.cat((x, ix), dim=1)
-            # cut off conditioning
-            x = x[:, c.shape[1]:]
-        return x
-
+#    @torch.no_grad()
+#    def sample(self, x, c1, c2, steps, temperature=1.0, sample=False, top_k=None,
+#               callback=lambda k: None):
+#        x = torch.cat((c1, c2, x),dim=1)
+#        block_size = self.transformer.get_block_size()
+#        assert not self.transformer.training
+#        if self.pkeep <= 0.0:
+#            # one pass suffices since input is pure noise anyway
+#            assert len(x.shape)==2
+#            noise_shape = (x.shape[0], steps-1)
+#            #noise = torch.randint(self.transformer.config.vocab_size, noise_shape).to(x)
+#            noise = c.clone()[:,x.shape[1]-c.shape[1]:-1]
+#            x = torch.cat((x,noise),dim=1)
+#            logits, _ = self.transformer(x)
+#            # take all logits for now and scale by temp
+#            logits = logits / temperature
+#            # optionally crop probabilities to only the top k options
+#            if top_k is not None:
+#                logits = self.top_k_logits(logits, top_k)
+#            # apply softmax to convert to probabilities
+#            probs = F.softmax(logits, dim=-1)
+#            # sample from the distribution or take the most likely
+#            if sample:
+#                shape = probs.shape
+#                probs = probs.reshape(shape[0]*shape[1],shape[2])
+#                ix = torch.multinomial(probs, num_samples=1)
+#                probs = probs.reshape(shape[0],shape[1],shape[2])
+#                ix = ix.reshape(shape[0],shape[1])
+#            else:
+#                _, ix = torch.topk(probs, k=1, dim=-1)
+#            # cut off conditioning
+#            x = ix[:, c.shape[1]-1:]
+#        else:
+#            for k in range(steps):
+#                callback(k)
+#                assert x.size(1) <= block_size # make sure model can see conditioning
+#                x_cond = x if x.size(1) <= block_size else x[:, -block_size:]  # crop context if needed
+#                logits, _ = self.transformer(x_cond)
+#                # pluck the logits at the final step and scale by temperature
+#                logits = logits[:, -1, :] / temperature
+#                # optionally crop probabilities to only the top k options
+#                if top_k is not None:
+#                    logits = self.top_k_logits(logits, top_k)
+#                # apply softmax to convert to probabilities
+#                probs = F.softmax(logits, dim=-1)
+#                # sample from the distribution or take the most likely
+#                if sample:
+#                    ix = torch.multinomial(probs, num_samples=1)
+#                else:
+#                    _, ix = torch.topk(probs, k=1, dim=-1)
+#                # append to the sequence and continue
+#                x = torch.cat((x, ix), dim=1)
+#            # cut off conditioning
+#            x = x[:, c.shape[1]:]
+#        return x
+#
     @torch.no_grad()
     def encode_to_z(self, x):
         quant_z, _, info = self.first_stage_model.encode(x)
@@ -172,55 +168,55 @@ class Net2NetTransformer(pl.LightningModule):
         x = self.first_stage_model.decode(quant_z)
         return x
 
-    @torch.no_grad()
-    def log_images(self, batch, temperature=None, top_k=None, callback=None, lr_interface=False, **kwargs):
-        log = dict()
-
-        N = 4
-        if lr_interface:
-            x, c = self.get_xc(batch, N, diffuse=False, upsample_factor=8)
-        else:
-            x, c = self.get_xc(batch, N)
-        x = x.to(device=self.device)
-        c = c.to(device=self.device)
-
-        quant_z, z_indices = self.encode_to_z(x)
-        quant_c, c_indices = self.encode_to_c(c)
-
-        # create a "half"" sample
-        z_start_indices = z_indices[:,:z_indices.shape[1]//2]
-        index_sample = self.sample(z_start_indices, c_indices,
-                                   steps=z_indices.shape[1]-z_start_indices.shape[1],
-                                   temperature=temperature if temperature is not None else 1.0,
-                                   sample=True,
-                                   top_k=top_k if top_k is not None else 100,
-                                   callback=callback if callback is not None else lambda k: None)
-        x_sample = self.decode_to_img(index_sample, quant_z.shape)
-
-        # sample
-        z_start_indices = z_indices[:, :0]
-        index_sample = self.sample(z_start_indices, c_indices,
-                                   steps=z_indices.shape[1],
-                                   temperature=temperature if temperature is not None else 1.0,
-                                   sample=True,
-                                   top_k=top_k if top_k is not None else 100,
-                                   callback=callback if callback is not None else lambda k: None)
-        x_sample_nopix = self.decode_to_img(index_sample, quant_z.shape)
-
-        # det sample
-        z_start_indices = z_indices[:, :0]
-        index_sample = self.sample(z_start_indices, c_indices,
-                                   steps=z_indices.shape[1],
-                                   sample=False,
-                                   callback=callback if callback is not None else lambda k: None)
-        x_sample_det = self.decode_to_img(index_sample, quant_z.shape)
-
-        # reconstruction
-        x_rec = self.decode_to_img(z_indices, quant_z.shape)
-
-        log["inputs"] = x
-        log["reconstructions"] = x_rec
-
+#    @torch.no_grad()
+#    def log_images(self, batch, temperature=None, top_k=None, callback=None, lr_interface=False, **kwargs):
+#        log = dict()
+#
+#        N = 4
+#        if lr_interface:
+#            x, c = self.get_xc(batch, N, diffuse=False, upsample_factor=8)
+#        else:
+#            x, c = self.get_xc(batch, N)
+#        x = x.to(device=self.device)
+#        c = c.to(device=self.device)
+#
+#        quant_z, z_indices = self.encode_to_z(x)
+#        quant_c, c_indices = self.encode_to_c(c)
+#
+#        # create a "half"" sample
+#        z_start_indices = z_indices[:,:z_indices.shape[1]//2]
+#        index_sample = self.sample(z_start_indices, c_indices,
+#                                   steps=z_indices.shape[1]-z_start_indices.shape[1],
+#                                   temperature=temperature if temperature is not None else 1.0,
+#                                   sample=True,
+#                                   top_k=top_k if top_k is not None else 100,
+#                                   callback=callback if callback is not None else lambda k: None)
+#        x_sample = self.decode_to_img(index_sample, quant_z.shape)
+#
+#        # sample
+#        z_start_indices = z_indices[:, :0]
+#        index_sample = self.sample(z_start_indices, c_indices,
+#                                   steps=z_indices.shape[1],
+#                                   temperature=temperature if temperature is not None else 1.0,
+#                                   sample=True,
+#                                   top_k=top_k if top_k is not None else 100,
+#                                   callback=callback if callback is not None else lambda k: None)
+#        x_sample_nopix = self.decode_to_img(index_sample, quant_z.shape)
+#
+#        # det sample
+#        z_start_indices = z_indices[:, :0]
+#        index_sample = self.sample(z_start_indices, c_indices,
+#                                   steps=z_indices.shape[1],
+#                                   sample=False,
+#                                   callback=callback if callback is not None else lambda k: None)
+#        x_sample_det = self.decode_to_img(index_sample, quant_z.shape)
+#
+#        # reconstruction
+#        x_rec = self.decode_to_img(z_indices, quant_z.shape)
+#
+#        log["inputs"] = x
+#        log["reconstructions"] = x_rec
+#
 #        if self.cond_stage_key != "image":
 #            cond_rec = self.fist(quant_c)
 #            if self.cond_stage_key == "segmentation":
